@@ -1,0 +1,664 @@
+<!--
+Statement of Account Creator (single-file, offline)
+- Borderless, minimal, formal
+- Add charges/payments/credits, running balance + totals
+- Print / Save as PDF
+- Export/Import JSON
+- Copy email summary
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Statement of Account</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --text:#0b0f19;
+      --muted:#6b7280;
+      --soft:#f6f7f9;
+      --soft2:#fbfbfc;
+      --focus:rgba(17,17,17,.10);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font:14px/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      letter-spacing:.1px;
+    }
+    .wrap{max-width:1020px;margin:0 auto;padding:34px 18px 70px}
+    .top{
+      display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+      padding-bottom:10px;margin-bottom:16px;
+    }
+    h1{margin:0;font-size:18px;font-weight:650;letter-spacing:.2px}
+    .sub{margin-top:6px;color:var(--muted);font-size:12.5px}
+    .actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+    button, .btn{
+      border:0;
+      background:var(--soft);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius:12px;
+      cursor:pointer;
+      font-size:13px;
+    }
+    button:hover{background:var(--soft2)}
+    button.primary{background:#0b0f19;color:#fff}
+    button.primary:hover{filter:brightness(1.05)}
+    button.danger{background:#fff1f2;color:#b91c1c}
+    button.danger:hover{background:#ffe4e6}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+    .section{padding:6px 2px}
+    .kicker{
+      font-size:12px;
+      letter-spacing:.18em;
+      text-transform:uppercase;
+      color:var(--muted);
+      margin:0 0 10px 0;
+    }
+    label{display:block;font-size:12.5px;color:var(--muted);margin:10px 0 6px}
+    input, textarea, select{
+      width:100%;
+      border:0;
+      border-radius:12px;
+      padding:10px 12px;
+      font-size:13px;
+      outline:none;
+      background:var(--soft);
+      color:var(--text);
+    }
+    textarea{min-height:74px;resize:vertical}
+    input:focus, textarea:focus, select:focus{box-shadow:0 0 0 4px var(--focus)}
+    .row{display:flex;gap:10px;align-items:center}
+    .row > *{flex:1}
+    .tight{flex:.6}
+    .tighter{flex:.45}
+    .hint{color:var(--muted);font-size:12.5px;margin-top:10px}
+    .spacer{height:18px}
+    .tableWrap{margin-top:14px}
+    table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    thead th{
+      text-align:left;
+      padding:0 10px 6px 10px;
+      font-size:12.5px;
+      color:var(--muted);
+      font-weight:600;
+      white-space:nowrap;
+    }
+    tbody tr{
+      background:var(--soft);
+      border-radius:14px;
+    }
+    tbody td{
+      padding:10px;
+      font-size:13px;
+      vertical-align:top;
+    }
+    tbody tr td:first-child{border-top-left-radius:14px;border-bottom-left-radius:14px}
+    tbody tr td:last-child{border-top-right-radius:14px;border-bottom-right-radius:14px}
+    .num{text-align:right}
+    .pill{
+      display:inline-flex;align-items:center;
+      padding:4px 10px;border-radius:999px;
+      background:rgba(255,255,255,.65);
+      font-size:12px;
+      color:var(--text);
+    }
+    .pill.charge{background:rgba(11,15,25,.08)}
+    .pill.payment{background:rgba(16,185,129,.12);color:#065f46}
+    .pill.credit{background:rgba(59,130,246,.12);color:#1e3a8a}
+    .summary{
+      margin-top:12px;
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:10px;
+    }
+    .metric{
+      background:var(--soft);
+      border-radius:14px;
+      padding:12px;
+    }
+    .metric .k{font-size:12px;color:var(--muted)}
+    .metric .v{margin-top:4px;font-size:16px;font-weight:700;letter-spacing:.2px}
+    .twoCol{
+      margin-top:14px;
+      display:grid;
+      grid-template-columns:1.2fr .8fr;
+      gap:18px;
+    }
+    .fileRow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    input[type="file"]{background:transparent;padding:0}
+    .small{font-size:12px}
+    .foot{
+      margin-top:18px;
+      color:var(--muted);
+      font-size:12.5px;
+      display:flex;
+      flex-wrap:wrap;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .right{text-align:right}
+
+    /* Print / PDF */
+    @media print{
+      .actions, .hint, .noPrint, .fileRow{display:none !important}
+      body{background:#fff}
+      .wrap{padding:0}
+      table{border-spacing:0}
+      tbody tr{background:#fff}
+      tbody td{padding:8px 8px}
+      thead th{color:#111;padding:0 8px 6px 8px}
+      .metric, input, textarea, select{background:#fff;box-shadow:none}
+      @page{margin:12mm}
+    }
+
+    @media (max-width:900px){
+      .grid{grid-template-columns:1fr}
+      .twoCol{grid-template-columns:1fr}
+      .summary{grid-template-columns:repeat(2,1fr)}
+      .actions{justify-content:flex-start}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>Statement of Account</h1>
+        <div class="sub">Create a clean statement and print to PDF for clients.</div>
+      </div>
+      <div class="actions">
+        <button id="btnNew" class="danger">New</button>
+        <button id="btnSave">Save</button>
+        <button id="btnLoad">Load</button>
+        <button id="btnCopyEmail">Copy Email</button>
+        <button id="btnPrint" class="primary">Print / PDF</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="section">
+        <div class="kicker">Issuer</div>
+        <label>Company / Issuer Name</label>
+        <input id="issuerName" placeholder="Your company name" />
+
+        <div class="row">
+          <div>
+            <label>Email</label>
+            <input id="issuerEmail" placeholder="accounts@company.com" />
+          </div>
+          <div>
+            <label>Phone</label>
+            <input id="issuerPhone" placeholder="+1 (___) ___-____" />
+          </div>
+        </div>
+
+        <label>Address (optional)</label>
+        <textarea id="issuerAddress" placeholder="Street, City, Region, Postal Code, Country"></textarea>
+
+        <label>Payment Details (optional)</label>
+        <textarea id="paymentDetails" placeholder="e.g., Bank transfer instructions, Stripe link, cheque payable to..."></textarea>
+      </section>
+
+      <section class="section">
+        <div class="kicker">Client</div>
+        <label>Client / Customer Name</label>
+        <input id="clientName" placeholder="Client name" />
+
+        <label>Client Email (optional)</label>
+        <input id="clientEmail" placeholder="client@company.com" />
+
+        <label>Client Address (optional)</label>
+        <textarea id="clientAddress" placeholder="Street, City, Region, Postal Code, Country"></textarea>
+
+        <div class="row">
+          <div class="tight">
+            <label>Statement Date</label>
+            <input id="statementDate" type="date" />
+          </div>
+          <div class="tight">
+            <label>Statement No. (optional)</label>
+            <input id="statementNo" placeholder="SOA-0001" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="tight">
+            <label>Currency</label>
+            <select id="currency">
+              <option value="CAD">CAD</option>
+              <option value="USD">USD</option>
+              <option value="INR">INR</option>
+              <option value="EUR">EUR</option>
+              <option value="GBP">GBP</option>
+              <option value="AUD">AUD</option>
+            </select>
+          </div>
+          <div class="tight">
+            <label>Opening Balance (optional)</label>
+            <input id="openingBalance" type="number" step="0.01" placeholder="0.00" />
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="spacer"></div>
+
+    <section class="section">
+      <div class="kicker">Line Items</div>
+
+      <div class="row">
+        <div class="tight">
+          <label>Date</label>
+          <input id="liDate" type="date" />
+        </div>
+        <div>
+          <label>Description</label>
+          <input id="liDesc" placeholder="e.g., Website development milestone #2" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="tight">
+          <label>Type</label>
+          <select id="liType">
+            <option value="charge">Charge</option>
+            <option value="payment">Payment</option>
+            <option value="credit">Credit</option>
+          </select>
+        </div>
+        <div class="tight">
+          <label>Reference (optional)</label>
+          <input id="liRef" placeholder="Invoice #, Receipt #, PO #" />
+        </div>
+        <div class="tight">
+          <label>Amount</label>
+          <input id="liAmount" type="number" step="0.01" placeholder="0.00" />
+        </div>
+        <div class="tighter" style="align-self:end">
+          <button id="btnAdd" class="primary" style="width:100%">Add</button>
+        </div>
+      </div>
+
+      <div class="hint">Charges increase balance. Payments and credits reduce balance.</div>
+
+      <div class="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Type</th>
+              <th>Reference</th>
+              <th class="num">Charge</th>
+              <th class="num">Payment/Credit</th>
+              <th class="num">Balance</th>
+              <th class="noPrint"></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="summary">
+        <div class="metric">
+          <div class="k">Total Charges</div>
+          <div class="v" id="sumCharges">—</div>
+        </div>
+        <div class="metric">
+          <div class="k">Total Payments/Credits</div>
+          <div class="v" id="sumPayments">—</div>
+        </div>
+        <div class="metric">
+          <div class="k">Opening Balance</div>
+          <div class="v" id="sumOpening">—</div>
+        </div>
+        <div class="metric">
+          <div class="k">Balance Due</div>
+          <div class="v" id="sumDue">—</div>
+        </div>
+      </div>
+
+      <div class="twoCol">
+        <div class="section">
+          <div class="kicker">Notes</div>
+          <textarea id="notes" placeholder="Optional notes to appear on the statement (e.g., payment terms, thank you note)."></textarea>
+          <div class="hint small">Use “Print / PDF” to generate a client-ready PDF.</div>
+        </div>
+
+        <div class="section">
+          <div class="kicker">Export / Import</div>
+          <div class="fileRow">
+            <button id="btnExportJson">Export JSON</button>
+            <label class="btn" for="fileImport">Import JSON</label>
+            <input id="fileImport" type="file" accept="application/json" style="display:none" />
+          </div>
+          <div class="hint small">JSON is for your records. PDF is for clients.</div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <div><span class="muted">Generated:</span> <span id="generatedAt">—</span></div>
+        <div class="right"><span class="muted">Prepared by:</span> <span id="preparedBy">—</span></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let items = [];
+
+    function todayISO(){
+      const d = new Date();
+      const tz = d.getTimezoneOffset() * 60000;
+      return new Date(d - tz).toISOString().slice(0,10);
+    }
+    function safeNumber(v){
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    }
+    function formatMoney(amount, currency){
+      try{
+        return new Intl.NumberFormat(undefined, { style:"currency", currency }).format(amount);
+      }catch{
+        return amount.toFixed(2) + " " + currency;
+      }
+    }
+    function escapeHtml(str){
+      return String(str ?? "")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
+    function typeLabel(t){
+      if(t === "charge") return `<span class="pill charge">Charge</span>`;
+      if(t === "payment") return `<span class="pill payment">Payment</span>`;
+      return `<span class="pill credit">Credit</span>`;
+    }
+    function cryptoRandomId(){
+      const arr = new Uint8Array(8);
+      (crypto?.getRandomValues?.(arr) || arr).forEach((_,i)=>arr[i]=Math.floor(Math.random()*256));
+      return Array.from(arr).map(b=>b.toString(16).padStart(2,"0")).join("");
+    }
+
+    function getFormData(){
+      return {
+        issuer: {
+          name: $("issuerName").value.trim(),
+          email: $("issuerEmail").value.trim(),
+          phone: $("issuerPhone").value.trim(),
+          address: $("issuerAddress").value.trim(),
+          paymentDetails: $("paymentDetails").value.trim(),
+        },
+        client: {
+          name: $("clientName").value.trim(),
+          email: $("clientEmail").value.trim(),
+          address: $("clientAddress").value.trim(),
+        },
+        statement: {
+          date: $("statementDate").value,
+          number: $("statementNo").value.trim(),
+          currency: $("currency").value,
+          openingBalance: safeNumber($("openingBalance").value),
+          notes: $("notes").value.trim(),
+        },
+        items: items.slice()
+      };
+    }
+
+    function setFormData(data){
+      $("issuerName").value = data?.issuer?.name ?? "";
+      $("issuerEmail").value = data?.issuer?.email ?? "";
+      $("issuerPhone").value = data?.issuer?.phone ?? "";
+      $("issuerAddress").value = data?.issuer?.address ?? "";
+      $("paymentDetails").value = data?.issuer?.paymentDetails ?? "";
+
+      $("clientName").value = data?.client?.name ?? "";
+      $("clientEmail").value = data?.client?.email ?? "";
+      $("clientAddress").value = data?.client?.address ?? "";
+
+      $("statementDate").value = data?.statement?.date ?? todayISO();
+      $("statementNo").value = data?.statement?.number ?? "";
+      $("currency").value = data?.statement?.currency ?? "CAD";
+      $("openingBalance").value = String(data?.statement?.openingBalance ?? 0);
+      $("notes").value = data?.statement?.notes ?? "";
+
+      items = Array.isArray(data?.items) ? data.items : [];
+      normalizeAndSortItems();
+      render();
+    }
+
+    function normalizeAndSortItems(){
+      items = items.map(x => ({
+        id: x.id || cryptoRandomId(),
+        date: x.date || todayISO(),
+        desc: x.desc || "",
+        type: (x.type === "payment" || x.type === "credit") ? x.type : "charge",
+        ref: x.ref || "",
+        amount: safeNumber(x.amount),
+      }));
+      items.sort((a,b) => (a.date || "").localeCompare(b.date || "") || (a.id || "").localeCompare(b.id || ""));
+    }
+
+    function render(){
+      const data = getFormData();
+      const cur = data.statement.currency;
+      const opening = safeNumber(data.statement.openingBalance);
+
+      let totalCharges = 0;
+      let totalPayments = 0;
+      let running = opening;
+
+      const rows = [];
+
+      for(const it of items){
+        const amt = safeNumber(it.amount);
+        const isCharge = it.type === "charge";
+        const isPayCredit = it.type === "payment" || it.type === "credit";
+
+        if(isCharge) totalCharges += amt;
+        if(isPayCredit) totalPayments += amt;
+
+        running += isCharge ? amt : -amt;
+
+        rows.push(`
+          <tr>
+            <td>${escapeHtml(it.date)}</td>
+            <td>${escapeHtml(it.desc)}</td>
+            <td>${typeLabel(it.type)}</td>
+            <td>${escapeHtml(it.ref)}</td>
+            <td class="num">${isCharge ? escapeHtml(formatMoney(amt, cur)) : ""}</td>
+            <td class="num">${isPayCredit ? escapeHtml(formatMoney(amt, cur)) : ""}</td>
+            <td class="num">${escapeHtml(formatMoney(running, cur))}</td>
+            <td class="num noPrint">
+              <button data-del="${it.id}" title="Remove">Remove</button>
+            </td>
+          </tr>
+        `);
+      }
+
+      $("tbody").innerHTML = rows.join("") || `
+        <tr>
+          <td colspan="8" class="muted" style="padding:12px 10px;">No line items yet. Add a charge or payment above.</td>
+        </tr>
+      `;
+
+      $("sumCharges").textContent  = formatMoney(totalCharges, cur);
+      $("sumPayments").textContent = formatMoney(totalPayments, cur);
+      $("sumOpening").textContent  = formatMoney(opening, cur);
+      $("sumDue").textContent      = formatMoney(opening + totalCharges - totalPayments, cur);
+
+      const now = new Date();
+      $("generatedAt").textContent = now.toLocaleString();
+      $("preparedBy").textContent  = data.issuer.name || "—";
+
+      document.querySelectorAll("[data-del]").forEach(btn=>{
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-del");
+          items = items.filter(x => x.id !== id);
+          render();
+        });
+      });
+    }
+
+    function addItem(){
+      const d = $("liDate").value || todayISO();
+      const desc = $("liDesc").value.trim();
+      const type = $("liType").value;
+      const ref = $("liRef").value.trim();
+      const amount = safeNumber($("liAmount").value);
+
+      if(!desc && !amount) return;
+      if(amount < 0){
+        alert("Please enter a positive amount. Use Type to indicate Payment/Credit.");
+        return;
+      }
+
+      items.push({ id: cryptoRandomId(), date:d, desc, type, ref, amount });
+      normalizeAndSortItems();
+
+      $("liDesc").value = "";
+      $("liRef").value = "";
+      $("liAmount").value = "";
+
+      render();
+    }
+
+    function newStatement(){
+      if(!confirm("Clear this statement?")) return;
+      setFormData({
+        issuer:{ name:"", email:"", phone:"", address:"", paymentDetails:"" },
+        client:{ name:"", email:"", address:"" },
+        statement:{ date: todayISO(), number:"", currency: $("currency").value || "CAD", openingBalance: 0, notes:"" },
+        items:[]
+      });
+    }
+
+    function saveLocal(){
+      localStorage.setItem("soa_draft_v1", JSON.stringify(getFormData()));
+      alert("Saved locally in this browser.");
+    }
+
+    function loadLocal(){
+      const raw = localStorage.getItem("soa_draft_v1");
+      if(!raw){ alert("No saved draft found."); return; }
+      try{ setFormData(JSON.parse(raw)); alert("Loaded saved draft."); }
+      catch{ alert("Saved draft is corrupted."); }
+    }
+
+    function exportJson(){
+      const data = getFormData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
+      const a = document.createElement("a");
+      const stamp = (data.statement.date || todayISO()).replaceAll("-","");
+      const name = (data.client.name || "client").replaceAll(/[^\w\-]+/g,"_");
+      a.href = URL.createObjectURL(blob);
+      a.download = `statement_of_account_${name}_${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function importJson(file){
+      const reader = new FileReader();
+      reader.onload = () => {
+        try{ setFormData(JSON.parse(String(reader.result || "{}"))); alert("Imported JSON."); }
+        catch{ alert("Invalid JSON file."); }
+      };
+      reader.readAsText(file);
+    }
+
+    async function copyEmail(){
+      const data = getFormData();
+      const cur = data.statement.currency;
+      const opening = safeNumber(data.statement.openingBalance);
+
+      let charges=0, pays=0;
+      for(const it of items){
+        const amt = safeNumber(it.amount);
+        if(it.type === "charge") charges += amt;
+        else pays += amt;
+      }
+      const due = opening + charges - pays;
+
+      const issuer = data.issuer.name || "Our team";
+      const client = data.client.name || "there";
+      const stNo = data.statement.number ? `Statement ${data.statement.number}` : "Statement of Account";
+      const stDate = data.statement.date || todayISO();
+
+      const lines = [
+        `Subject: ${stNo} — ${formatMoney(due, cur)} due`,
+        ``,
+        `Hi ${client},`,
+        ``,
+        `Please find your statement of account as of ${stDate}.`,
+        ``,
+        `Summary:`,
+        `• Opening balance: ${formatMoney(opening, cur)}`,
+        `• Total charges: ${formatMoney(charges, cur)}`,
+        `• Total payments/credits: ${formatMoney(pays, cur)}`,
+        `• Balance due: ${formatMoney(due, cur)}`,
+      ];
+
+      if(data.issuer.paymentDetails){
+        lines.push(``, `Payment details:`, data.issuer.paymentDetails.trim());
+      }
+      if(data.statement.notes){
+        lines.push(``, `Notes:`, data.statement.notes.trim());
+      }
+
+      lines.push(``, `Thank you,`, issuer);
+
+      const text = lines.join("\n");
+      try{ await navigator.clipboard.writeText(text); alert("Email text copied."); }
+      catch{
+        const ta = document.createElement("textarea");
+        ta.value = text; document.body.appendChild(ta);
+        ta.select(); document.execCommand("copy"); ta.remove();
+        alert("Email text copied.");
+      }
+    }
+
+    function init(){
+      $("statementDate").value = todayISO();
+      $("liDate").value = todayISO();
+
+      [
+        "issuerName","issuerEmail","issuerPhone","issuerAddress","paymentDetails",
+        "clientName","clientEmail","clientAddress",
+        "statementDate","statementNo","currency","openingBalance","notes"
+      ].forEach(id => $(id).addEventListener("input", render));
+
+      $("btnAdd").addEventListener("click", addItem);
+      $("btnNew").addEventListener("click", newStatement);
+      $("btnSave").addEventListener("click", saveLocal);
+      $("btnLoad").addEventListener("click", loadLocal);
+      $("btnExportJson").addEventListener("click", exportJson);
+      $("btnCopyEmail").addEventListener("click", copyEmail);
+      $("btnPrint").addEventListener("click", () => window.print());
+
+      $("fileImport").addEventListener("change", (e) => {
+        const f = e.target.files && e.target.files[0];
+        if(f) importJson(f);
+        e.target.value = "";
+      });
+
+      $("liAmount").addEventListener("keydown", (e)=>{
+        if(e.key === "Enter"){ e.preventDefault(); addItem(); }
+      });
+
+      render();
+    }
+    init();
+  </script>
+</body>
+</html>
